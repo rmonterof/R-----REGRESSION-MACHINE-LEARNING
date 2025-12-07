@@ -1,0 +1,142 @@
+---
+title: "MovieLens Data Project 1"
+author: "Rocio Montero Fornos"
+date: "5/7/2021"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Libraries I download to perform the code.
+
+```{r libraries}
+library(stringr)
+library(ggplot2)
+library(caret)
+library(readr)
+library(dplyr)
+library(stats)
+library(corrplot)
+library(tidyr)
+library(lubridate)
+library(data.table)
+library(DT)
+library(methods)
+library(knitr)
+library(grid)
+library(gridExtra)
+library(Matrix)
+library(corrplot)
+library(RColorBrewer)
+library(corrplot)
+library(magrittr)
+library(viridis)
+library(stringi)
+library(matrixStats)
+library(gam)
+library(modelr)
+library(tidyr)
+library(tidyselect)
+library(broom)
+library(tibble)
+library(purrr)
+library(forcats)
+library(lattice)
+```
+
+
+## MovieLens Introduction
+The MovieLens data set was collected by GroupLens Research. 
+Can we predict movie ratings based on user preferance, age of a movie?  Using the MovieLens data set and penalized least squares, the following R script calculates the RMSE based on user ratings, movieId and the age of the movie.
+
+The MovieLens data set contains 10000054 rows, 10677 movies, 797 genres and 69878 users.
+
+The steps performed for analysis of the data 
+- Created an age of movie column
+- Graphic displays of movie, users and ratings in order to find a pattern or insight to the   
+  behavior of the data.
+- Explored Genres to determine if ratings could be predicted by genre.
+- Explored the Coefficient of Determination R-Squared
+- Graphically explored the linear correlation coefficient, r-value
+- Calculate RMSE based on movieId, userId, and age of the movie.
+
+# DownLoad the data
+```{r download the data, echo=TRUE}
+##########################################################
+# Create edx set, validation set (final hold-out test set)
+##########################################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/a
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+
+# if using R 4.0 or later:
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+set.seed(1, sample.kind="Rounding") # if using R 3.5 or earlier, use `set.seed(1)`
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+  semi_join(edx, by = "movieId") %>%
+  semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+
+```
+
+##Data Cleaning and, data exploration and Data Visulization
+#In order to determine if age of the movie is a factor for predicting rating, I extracted the premier date of the movie, and then calculated the age of the movie.  I will also looked at individual genres for genre effect, as well as, effects of user ratings.
+```{r head, echo=TRUE}
+head(edx)
+glimpse(edx)
+```
+
+#How many distinct movie, users and genres
+```{r nrows, echo=TRUE}
+n_distinct(edx$movieId)
+n_distinct(edx$genres)
+n_distinct(edx$userId)
+nrow(edx)
+```
+
+
+
+

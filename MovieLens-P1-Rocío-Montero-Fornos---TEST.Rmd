@@ -1,0 +1,282 @@
+---
+title: "MovieLens Data Project 1"
+author: "Rocio Montero Fornos"
+date: "5/7/2021"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Libraries I download to perform the code.
+
+```{r libraries}
+library(knitr)
+library(grid)
+library(gridExtra)
+library(tidyr)
+library(tidyselect)
+library(broom)
+library(tibble)
+library(purrr)
+library(forcats)
+library(Matrix)
+library(stringr)
+library(ggplot2)
+library(caret)
+library(readr)
+library(dplyr)
+library(stats)
+library(corrplot)
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(corrplot)
+library(RColorBrewer)
+library(matrixStats)
+library(lattice)
+```
+
+
+## MovieLens Introduction
+The MovieLens data set was collected by GroupLens Research. 
+Can we predict movie ratings based on user preferance, age of a movie?  Using the MovieLens data set and penalized least squares, the following R script calculates the RMSE based on user ratings, movieId and the age of the movie.
+
+The MovieLens data set contains 10000054 rows, 10677 movies, 797 genres and 69878 users.
+
+The steps performed for analysis of the data 
+- Created an age of movie column
+- Graphic displays of movie, users and ratings in order to find a pattern or insight to the   
+  behavior of the data.
+- Explored Genres to determine if ratings could be predicted by genre.
+- Explored the Coefficient of Determination R-Squared
+- Graphically explored the linear correlation coefficient, r-value
+- Calculate RMSE based on movieId, userId, and age of the movie.
+
+# DownLoad the data
+```{r download the data, echo=TRUE}
+##########################################################
+# Create edx set, validation set (final hold-out test set)
+##########################################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(data.table)
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/a
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+
+
+# if using R 4.0 or later:
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                           title = as.character(title),
+                                           genres = as.character(genres))
+
+
+movielens <- left_join(ratings, movies, by = "movieId")
+
+# Validation set will be 10% of MovieLens data
+set.seed(1, sample.kind="Rounding") # if using R 3.5 or earlier, use `set.seed(1)`
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+  semi_join(edx, by = "movieId") %>%
+  semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+
+```
+
+..3
+##Data Cleaning and, data exploration and Data Visulization
+#In order to determine if age of the movie is a factor for predicting rating, I extracted the premier date of the movie, and then calculated the age of the movie.  I will also looked at individual genres for genre effect, as well as, effects of user ratings.
+
+```{r}
+head(edx)
+glimpse(edx)
+```
+
+There are 9,000,005 observations, 10,677 movie titles, 797 different movie genres, and 69,878 users before the cross validation.
+
+```{r}
+n_distinct(edx$movieId)
+n_distinct(edx$genres)
+n_distinct(edx$userId)
+nrow(edx)
+```
+
+
+```{r}
+summary(edx)
+```
+
+
+
+```{r str, echo=TRUE}
+str(edx)
+glimpse(edx)
+```
+
+EXPLORATORY ANALISIS
+# total number of observations
+```{r no. of obs., echo=TRUE}
+tot_observation <- length(edx$rating) + length(validation$rating) 
+tot_observation
+```
+
+plot - distribution of movie ratings
+```{r ratings distr, echo=TRUE)}
+#Distribution of Movie Ratings
+edx %>% group_by(movieId) %>% summarize(n = n()) %>%
+  ggplot(aes(n)) + geom_histogram(fill = "blue4", color = "white", bins = 25) +
+  scale_x_log10() +
+  ggtitle("Number of Movies Ratings")
+```
+As we can see, there are many gaps in the distribution. That means that many movies had not been rated at all. Besides, with summary values such as median: 1834 and mean: 4122 it's obvious that the right side of the distribution from the median is strongly skewed, which means that median and mean values differ very much due to outliers that unbalance the distribution. The continous steady stair pattern of the right side of the median shows that up to the median 1834 all points have the tendency to gather around the regression line.
+
+
+plot - distribution of users
+```{r ratings distr, echo=TRUE)}
+#Distribution of Movie Ratings
+edx %>% group_by(userId) %>% summarize(n = n()) %>%
+  ggplot(aes(n)) + geom_histogram(fill = "yellow3", color = "white", bins = 25) +
+  scale_x_log10() +
+  ggtitle("Number of UserId's")
+```
+
+
+
+```{r}
+head(mean(edx$userId))
+head(mean(edx$rating))
+head(median(edx$rating))
+```
+
+
+plot - distribution of movie genres
+```{r genres distr, echo=TRUE)}
+#Distribution of Movie Ratings
+edx %>% filter(genres) %>% summarize(n = n()) %>%
+  ggplot(aes(n)) + geom_histogram(fill = "chocolate", color = "white", bins = 25) +
+  scale_x_log10() +
+  ggtitle("Number of Movies Genres")
+```
+
+Ratings distribution
+```{r unique distr, echo=TRUE)}
+rtg_distr <- as.vector(edx$rating)
+unique(rtg_distr) 
+```
+
+From 0 to 5 stars, the most frequent movie ratings seem to be 3, 4, and 5. We also should take into account that not all users are equally active rating movies, and its number may differ from one user to another. If we take a glimpse of the distributions of movie ratings, this is how it looks like:
+
+```{r f 0.0.plot, echo=TRUE)}
+rtg_distr <- rtg_distr[rtg_distr != 0]
+rtg_distr <- factor(rtg_distr)
+qplot(rtg_distr, bins =10) +
+  ggtitle("Ratings' Distribution")
+```
+
+The most frequent ratings are in order: 4, 3, 5, 3.5, and 2 points. Let's take a look at which users rate the most and the least in the Movielens data set.
+
+Genres distribution
+```{r genres distr, echo=TRUE)}
+gnr_distr <- as.vector(edx$genres)
+unique(gnr_distr)
+```
+We can see the number 797 are all mixed-up categories of various genre types at the same time. We have to find out which variable is optimal to predict the ratings. Let's plot its distribution:
+
+```{r genres distr plot, echo=TRUE)}
+edx%>%
+ggplot(aes(edx$genres, edx$rating)) +
+geom_point(alpha=0.5) +
+geom_smooth(method="lm") +
+facet_wrap(~edx$genres) +
+  ggtitle("Genres' Distribution")
+```
+
+
+```{r cor ratings genres, echo=TRUE)}
+mu_x <- mean(edx$rating)
+mu_y <- mean(edx$movieId)
+sd_x <- sd(edx$rating)
+sd_y <- sd(edx$movieId)
+r <- cor(edx$rating, edx$movieId)
+r
+```
+
+
+```{r cor ratings userId, echo=TRUE)}
+mu_x <- mean(edx$rating)
+mu_y <- mean(edx$userId)
+sd_x <- sd(edx$rating)
+sd_y <- sd(edx$userId)
+r <- cor(edx$rating, edx$userId)
+r
+```
+
+
+```{r cor ratings timestamp, echo=TRUE)}
+mu_x <- mean(edx$rating)
+mu_y <- mean(edx$timestamp)
+sd_x <- sd(edx$rating)
+sd_y <- sd(edx$timestamp)
+r <- cor(edx$rating, edx$timestamp)
+m_1 <- r*sd_y/sd_x
+b_1 <- mu_y-m_1*mu_x
+r
+m_1
+b_1
+```
+
+
+```{r cor movieId plot, echo= TRUE)}
+edx%>%
+ggplot(aes(rating, movieId))+
+geom_point(alpha=0.5) +
+geom_abline(slope=m_1, intercept=b_1, col="blue")
+```
+
+
+Movies distribution
+
+```{r Movies dtrb plot, echo=TRUE)}
+edx%>%
+  ggplot(aes(edx$userId)) +
+geom_point(aes(edx$rating, edx$movieId), col="blue4") +
+   scale_x_log10() +
+  ggtitle("Movies Distribution")
+```
+
+
+
+
+
+
+
